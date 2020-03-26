@@ -1,5 +1,5 @@
 jobs:
-- job: Linux (Ubuntu 18.04)
+- job: Ubuntu18.04
   pool:
     vmImage: 'ubuntu-latest'
   steps:
@@ -33,7 +33,7 @@ jobs:
     inputs:
       ArtifactName: Linux
     condition: succeededOrFailed()
-- job: Linux (Ubuntu 16.04)
+- job: Ubuntu16.04
   pool:
     vmImage: 'ubuntu-16.04'
   steps:
