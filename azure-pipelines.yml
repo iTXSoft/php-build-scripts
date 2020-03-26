@@ -1,5 +1,39 @@
 jobs:
-- job: Linux
+  job: Linux (Ubuntu 18.04)
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - bash: |
+      sudo apt-get update
+      sudo apt-get install make autoconf automake libtool libtool-bin m4 wget libc-bin gzip bzip2 bison g++ git
+    displayName: Install Dependencies
+  - bash: |
+
+      # Used "set -ex" instead of hashbang since script isn't executed with hashbang
+      set -ex
+
+      trap "exit 1" ERR
+
+      echo $PWD
+      ls
+      chmod +x compile.sh
+      echo | ./compile.sh -t linux64 -j 4 -f -u -g -l
+      tar -czf ./PHP_Linux-x86_64.tar.gz bin
+    displayName: Build PHP
+  - bash: |
+      pwd
+      cd $BUILD_SOURCESDIRECTORY
+      pwd
+      cp PHP_Linux-x86_64.tar.gz $BUILD_ARTIFACTSTAGINGDIRECTORY
+      cp install.log $BUILD_ARTIFACTSTAGINGDIRECTORY
+    displayName: Copy Artifacts
+    condition: succeededOrFailed()
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Artifact: Linux'
+    inputs:
+      ArtifactName: Linux
+    condition: succeededOrFailed()
+- job: Linux (Ubuntu 16.04)
   pool:
     vmImage: 'ubuntu-16.04'
   steps:
