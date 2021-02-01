@@ -2,31 +2,36 @@
 
 REM For future users: This file MUST have CRLF line endings. If it doesn't, lots of inexplicable undesirable strange behaviour will result.
 REM Also: Don't modify this version with sed, or it will screw up your line endings.
-set PHP_MAJOR_VER=7.3
-set PHP_VER=%PHP_MAJOR_VER%.16
-set PHP_IS_BETA="no"
+set PHP_MAJOR_VER=7.4
+set PHP_VER=%PHP_MAJOR_VER%.14
+set PHP_IS_BETA=no
 set PHP_SDK_VER=2.2.0
 set PATH=C:\Program Files\7-Zip;C:\Program Files (x86)\GnuWin32\bin;%PATH%
 set VC_VER=vc15
 set ARCH=x64
-set CMAKE_TARGET=Visual Studio 15 2017 Win64
+set VS_VER=
+set VS_YEAR=
+set CMAKE_TARGET=
 if "%PHP_DEBUG_BUILD%"=="" (
 	set PHP_DEBUG_BUILD=0
 )
 
-set LIBYAML_VER=0.2.2
+set LIBYAML_VER=0.2.5
 set PTHREAD_W32_VER=3.0.0
-set LEVELDB_MCPE_VER=10f59b56bec1db3ffe42ff265afe22182073e0e2
+set LEVELDB_MCPE_VER=c66f4648c262dfe47ad089aa9af8156c58765c72
+set LIBDEFLATE_VER=448e3f3b042219bccb0080e393ba3eb68c2091d5
 
-set PHP_PTHREADS_VER=646dac62ae0d48c1ada7b007e15575fb84f7d71d
-set PHP_YAML_VER=2.0.4
-set PHP_POCKETMINE_CHUNKUTILS_VER=master
-set PHP_IGBINARY_VER=3.1.2
+set PHP_PTHREADS_VER=bc16ee7b5a21faee9bd1743f830f7135b763fb56
+set PHP_YAML_VER=2.2.0
+set PHP_CHUNKUTILS2_VER=5a4dcd6ed74e0db2ca9a54948d4f3a065e386db5
+set PHP_IGBINARY_VER=3.2.1
 REM this is 1.2.9 but tags with a "v" prefix are a pain in the ass
 set PHP_DS_VER=2ddef84d3e9391c37599cb716592184315e23921
-set PHP_LEVELDB_VER=9bcae79f71b81a5c3ea6f67e45ae9ae9fb2775a5
+set PHP_LEVELDB_VER=2e3f740b55af1eb6dfc648dd451bcb7d6151c26c
 set PHP_CRYPTO_VER=5f26ac91b0ba96742cc6284cd00f8db69c3788b2
 set PHP_RECURSIONGUARD_VER=d6ed5da49178762ed81dc0184cd34ff4d3254720
+set PHP_MORTON_VER=0.1.2
+set PHP_LIBDEFLATE_VER=be5367c81c61c612271377cdae9ffacac0f6e53a
 
 set script_path=%~dp0
 set log_file=%script_path%compile.log
@@ -57,13 +62,17 @@ if "%SOURCES_PATH%"=="" (
 )
 call :pm-echo "Using path %SOURCES_PATH% for build sources"
 
+call :check-vs-exists 2017 15 || call :check-vs-exists 2019 16 || call :pm-fatal-error "Please install Visual Studio 2017 or 2019"
+
 REM export an env var to override this if you're using something other than the community edition
 if "%VS_EDITION%"=="" (
 	set VS_EDITION=Community
 )
-call "C:\Program Files (x86)\Microsoft Visual Studio\2017\%VS_EDITION%\VC\Auxiliary\Build\vcvarsall.bat" %ARCH% >>"%log_file%" 2>&1 || call :pm-fatal-error "Error initializing Visual Studio environment"
+call "C:\Program Files (x86)\Microsoft Visual Studio\%VS_YEAR%\%VS_EDITION%\VC\Auxiliary\Build\vcvarsall.bat" %ARCH% -vcvars_ver=14.16 >>"%log_file%" 2>&1 || call :pm-fatal-error "Error initializing Visual Studio environment"
+:batchfiles-are-stupid
+move "%log_file%" "%log_file%" >nul 2>nul || goto :batchfiles-are-stupid
 
-cd "%outpath%"
+cd /D "%outpath%"
 
 if exist bin (
 	call :pm-echo "Deleting old binary folder..."
@@ -76,9 +85,9 @@ if exist "%SOURCES_PATH%" (
 )
 
 call :pm-echo "Getting SDK..."
-git clone https://github.com/OSTC/php-sdk-binary-tools.git -b php-sdk-%PHP_SDK_VER% --depth=1 -q "%SOURCES_PATH%" >>"%log_file%" 2>&1
+git clone https://github.com/OSTC/php-sdk-binary-tools.git -b php-sdk-%PHP_SDK_VER% --depth=1 -q "%SOURCES_PATH%" >>"%log_file%" 2>&1 || call :pm-fatal-error "Failed to download SDK"
 
-cd "%SOURCES_PATH%"
+cd /D "%SOURCES_PATH%"
 
 call bin\phpsdk_setvars.bat >>"%log_file%" 2>&1
 
@@ -98,29 +107,32 @@ call bin\phpsdk_deps.bat -u -t %VC_VER% -b %PHP_MAJOR_VER% -a %ARCH% -f -d %DEPS
 
 
 call :pm-echo "Getting additional dependencies..."
-cd "%DEPS_DIR%"
+cd /D "%DEPS_DIR%"
 
 call :pm-echo "Downloading LibYAML version %LIBYAML_VER%..."
 call :get-zip https://github.com/yaml/libyaml/archive/%LIBYAML_VER%.zip || exit 1
 move libyaml-%LIBYAML_VER% libyaml >>"%log_file%" 2>&1
-cd libyaml
-cmake -G "%CMAKE_TARGET%" -DBUILD_SHARED_LIBS=ON . >>"%log_file%" 2>&1 || exit 1
+cd /D libyaml
+call :pm-echo "Generating build configuration..."
+cmake -G "%CMAKE_TARGET%" -A "%ARCH%"^
+ -DCMAKE_PREFIX_PATH="%DEPS_DIR%"^
+ -DCMAKE_INSTALL_PREFIX="%DEPS_DIR%"^
+ -DBUILD_SHARED_LIBS=ON^
+ . >>"%log_file%" 2>&1 || exit 1
 call :pm-echo "Compiling..."
-msbuild yaml.sln /p:Configuration=RelWithDebInfo /m >>"%log_file%" 2>&1 || exit 1
-call :pm-echo "Copying files..."
-copy RelWithDebInfo\yaml.lib "%DEPS_DIR%\lib\yaml.lib" >>"%log_file%" 2>&1 || exit 1
-copy RelWithDebInfo\yaml.dll "%DEPS_DIR%\bin\yaml.dll" >>"%log_file%" 2>&1 || exit 1
+msbuild ALL_BUILD.vcxproj /p:Configuration=RelWithDebInfo /m >>"%log_file%" 2>&1 || exit 1
+call :pm-echo "Installing files..."
+msbuild INSTALL.vcxproj /p:Configuration=RelWithDebInfo /m >>"%log_file%" 2>&1 || exit 1
 copy RelWithDebInfo\yaml.pdb "%DEPS_DIR%\bin\yaml.pdb" >>"%log_file%" 2>&1 || exit 1
-copy include\yaml.h "%DEPS_DIR%\include\yaml.h" >>"%log_file%" 2>&1 || exit 1
 
-cd "%DEPS_DIR%"
+cd /D "%DEPS_DIR%"
 
 call :pm-echo "Downloading pthread-w32 version %PTHREAD_W32_VER%..."
 mkdir pthread-w32
-cd pthread-w32
+cd /D pthread-w32
 call :get-zip https://netcologne.dl.sourceforge.net/project/pthreads4w/pthreads4w-code-v%PTHREAD_W32_VER%.zip || exit 1
 move pthreads4w-code-* pthreads4w-code >>"%log_file%" 2>&1
-cd pthreads4w-code
+cd /D pthreads4w-code
 
 call :pm-echo "Compiling..."
 nmake VC >>"%log_file%" 2>&1 || exit 1
@@ -134,49 +146,70 @@ copy pthreadVC3.lib "%DEPS_DIR%\lib\pthreadVC3.lib" >>"%log_file%" 2>&1 || exit 
 copy pthreadVC3.dll "%DEPS_DIR%\bin\pthreadVC3.dll" >>"%log_file%" 2>&1 || exit 1
 copy pthreadVC3.pdb "%DEPS_DIR%\bin\pthreadVC3.pdb" >>"%log_file%" 2>&1 || exit 1
 
-cd "%DEPS_DIR%"
+cd /D "%DEPS_DIR%"
 
-call :pm-echo "Downloading leveldb-mcpe version %LEVELDB_MCPE_VER%..."
-call :get-zip https://github.com/pmmp/leveldb-mcpe/archive/%LEVELDB_MCPE_VER%.zip || exit 1
-move leveldb-mcpe-%LEVELDB_MCPE_VER% leveldb >>"%log_file%" 2>&1
-cd leveldb
+call :pm-echo "Downloading pmmp/leveldb version %LEVELDB_MCPE_VER%..."
+call :get-zip https://github.com/pmmp/leveldb/archive/%LEVELDB_MCPE_VER%.zip || exit 1
+move leveldb-%LEVELDB_MCPE_VER% leveldb >>"%log_file%" 2>&1
+cd /D leveldb
+
+call :pm-echo "Generating build configuration..."
+cmake -G "%CMAKE_TARGET%" -A "%ARCH%"^
+ -DCMAKE_PREFIX_PATH="%DEPS_DIR%"^
+ -DCMAKE_INSTALL_PREFIX="%DEPS_DIR%"^
+ -DBUILD_SHARED_LIBS=ON^
+ -DLEVELDB_BUILD_BENCHMARKS=OFF^
+ -DLEVELDB_BUILD_TESTS=OFF^
+ -DZLIB_LIBRARY="%DEPS_DIR%\lib\zlib_a.lib"^
+ . >>"%log_file%" 2>&1 || exit 1
+call :pm-echo "Compiling"
+msbuild ALL_BUILD.vcxproj /p:Configuration=RelWithDebInfo /m >>"%log_file%" 2>&1 || exit 1
+call :pm-echo "Installing files..."
+msbuild INSTALL.vcxproj /p:Configuration=RelWithDebInfo >>"%log_file%" 2>&1 || exit 1
+copy RelWithDebInfo\leveldb.pdb "%DEPS_DIR%\bin\leveldb.pdb" >>"%log_file%" 2>&1 || exit 1
+
+cd /D "%DEPS_DIR%"
+
+call :pm-echo "Downloading libdeflate version %LIBDEFLATE_VER%..."
+call :get-zip https://github.com/ebiggers/libdeflate/archive/%LIBDEFLATE_VER%.zip || exit 1
+move libdeflate-%LIBDEFLATE_VER% libdeflate >>"%log_file%" 2>&1
+cd /D libdeflate
 
 call :pm-echo "Compiling..."
-msbuild leveldb.sln /p:Configuration=Release /p:ZlibIncludePath="%DEPS_DIR%\include" /p:ZlibLibPath="%DEPS_DIR%\lib\zlib_a.lib" /m >>"%log_file%" 2>&1 || exit 1
+nmake /f Makefile.msc >>"%log_file%" 2>&1 || exit 1
 call :pm-echo "Copying files..."
-mkdir "%DEPS_DIR%\include\leveldb" >>"%log_file%" 2>&1 || exit 1
-xcopy include\leveldb %DEPS_DIR%\include\leveldb >>"%log_file%" 2>&1 || exit 1
+copy libdeflate.dll "%DEPS_DIR%\bin\libdeflate.dll" >>"%log_file%" 2>&1 || exit 1
+copy libdeflate.lib "%DEPS_DIR%\lib\libdeflate.lib" >>"%log_file%" 2>&1 || exit 1
+copy libdeflate.h "%DEPS_DIR%\include\libdeflate.h" >>"%log_file%" 2>&1 || exit 1
 
-copy x64\Release\leveldb.lib "%DEPS_DIR%\lib\leveldb.lib" >>"%log_file%" 2>&1
-copy x64\Release\leveldb.dll "%DEPS_DIR%\bin\leveldb.dll" >>"%log_file%" 2>&1
-copy x64\Release\leveldb.pdb "%DEPS_DIR%\bin\leveldb.pdb" >>"%log_file%" 2>&1
+cd /D "%DEPS_DIR%"
 
-cd "%DEPS_DIR%"
-
-cd ..
+cd /D ..
 
 call :pm-echo "Getting additional PHP extensions..."
-cd php-src\ext
+cd /D php-src\ext
 
 call :get-extension-zip-from-github "pthreads"              "%PHP_PTHREADS_VER%"              "pmmp"     "pthreads"                || exit 1
 call :get-extension-zip-from-github "yaml"                  "%PHP_YAML_VER%"                  "php"      "pecl-file_formats-yaml"  || exit 1
-call :get-extension-zip-from-github "pocketmine_chunkutils" "%PHP_POCKETMINE_CHUNKUTILS_VER%" "dktapps"  "PocketMine-C-ChunkUtils" || exit 1
+call :get-extension-zip-from-github "chunkutils2"           "%PHP_CHUNKUTILS2_VER%"           "pmmp"     "ext-chunkutils2"         || exit 1
 call :get-extension-zip-from-github "igbinary"              "%PHP_IGBINARY_VER%"              "igbinary" "igbinary"                || exit 1
 call :get-extension-zip-from-github "ds"                    "%PHP_DS_VER%"                    "php-ds"   "ext-ds"                  || exit 1
-call :get-extension-zip-from-github "leveldb"               "%PHP_LEVELDB_VER%"               "reeze"    "php-leveldb"             || exit 1
+call :get-extension-zip-from-github "leveldb"               "%PHP_LEVELDB_VER%"               "pmmp"     "php-leveldb"             || exit 1
 call :get-extension-zip-from-github "recursionguard"        "%PHP_RECURSIONGUARD_VER%"        "pmmp"     "ext-recursionguard"      || exit 1
+call :get-extension-zip-from-github "morton"                "%PHP_MORTON_VER%"                "pmmp"     "ext-morton"              || exit 1
+call :get-extension-zip-from-github "libdeflate"            "%PHP_LIBDEFLATE_VER%"            "pmmp"     "ext-libdeflate"          || exit 1
 
 call :pm-echo " - crypto: downloading %PHP_CRYPTO_VER%..."
 git clone https://github.com/bukka/php-crypto.git crypto >>"%log_file%" 2>&1 || exit 1
-cd crypto
+cd /D crypto
 git checkout %PHP_CRYPTO_VER% >>"%log_file%" 2>&1 || exit 1
 git submodule update --init --recursive >>"%log_file%" 2>&1 || exit 1
-cd ..
+cd /D ..
 
-cd ..\..
+cd /D ..\..
 
 :skip
-cd php-src
+cd /D php-src
 call :pm-echo "Configuring PHP..."
 call buildconf.bat >>"%log_file%" 2>&1
 
@@ -191,6 +224,7 @@ call configure^
  --enable-pdo^
  --enable-bcmath^
  --enable-calendar^
+ --enable-chunkutils2=shared^
  --enable-com-dotnet^
  --enable-ctype^
  --enable-ds=shared^
@@ -199,9 +233,9 @@ call configure^
  --enable-igbinary=shared^
  --enable-json^
  --enable-mbstring^
+ --enable-morton^
  --enable-opcache^
  --enable-phar^
- --enable-pocketmine-chunkutils=shared^
  --enable-recursionguard=shared^
  --enable-sockets^
  --enable-tokenizer^
@@ -217,6 +251,7 @@ call configure^
  --with-gmp^
  --with-iconv^
  --with-leveldb=shared^
+ --with-libdeflate=shared^
  --with-libxml^
  --with-mysqli=shared^
  --with-mysqlnd^
@@ -247,10 +282,10 @@ del /q "%SOURCES_PATH%\php-src\%ARCH%\Release_TS\php-%PHP_VER%\gmodule-*.dll" 2>
 rmdir /s /q "%SOURCES_PATH%\php-src\%ARCH%\Release_TS\php-%PHP_VER%\lib\enchant\" 2>&1
 
 call :pm-echo "Copying artifacts..."
-cd "%outpath%"
+cd /D "%outpath%"
 mkdir bin
 move "%SOURCES_PATH%\php-src\%ARCH%\%OUT_PATH_REL%_TS\php-%PHP_VER%" bin\php
-cd bin\php
+cd /D bin\php
 
 set php_ini=php.ini
 call :pm-echo "Generating php.ini..."
@@ -264,17 +299,19 @@ call :pm-echo "Generating php.ini..."
 (echo extension_dir=ext)>>"%php_ini%"
 (echo extension=php_pthreads.dll)>>"%php_ini%"
 (echo extension=php_openssl.dll)>>"%php_ini%"
-(echo extension=php_pocketmine_chunkutils.dll)>>"%php_ini%"
+(echo extension=php_chunkutils2.dll)>>"%php_ini%"
 (echo extension=php_igbinary.dll)>>"%php_ini%"
 (echo extension=php_ds.dll)>>"%php_ini%"
 (echo extension=php_leveldb.dll)>>"%php_ini%"
 (echo extension=php_crypto.dll)>>"%php_ini%"
+(echo extension=php_libdeflate.dll)>>"%php_ini%
 (echo igbinary.compact_strings=0)>>"%php_ini%"
 (echo zend_extension=php_opcache.dll)>>"%php_ini%"
 (echo opcache.enable=1)>>"%php_ini%"
 (echo opcache.enable_cli=1)>>"%php_ini%"
 (echo opcache.save_comments=1)>>"%php_ini%"
-(echo opcache.validate_timestamps=0)>>"%php_ini%"
+(echo opcache.validate_timestamps=1)>>"%php_ini%"
+(echo opcache.revalidate_freq=0)>>"%php_ini%"
 (echo opcache.file_update_protection=0)>>"%php_ini%"
 (echo opcache.optimization_level=0x7FFEBFFF)>>"%php_ini%"
 (echo ;Optional extensions, supplied for plugin use)>>"%php_ini%"
@@ -286,10 +323,11 @@ call :pm-echo "Generating php.ini..."
 (echo recursionguard.enabled=0 ;disabled due to minor performance impact, only enable this if you need it for debugging)>>"%php_ini%"
 REM TODO: more entries
 
-cd ..\..
+cd /D ..\..
 
-call :pm-echo "Downloading Microsoft Visual C++ Redistributable 2017"
-wget https://aka.ms/vs/15/release/vc_redist.x64.exe --no-check-certificate -q -O vc_redist.x64.exe || exit 1
+REM this includes all the stuff necessary to run anything needing 2015, 2017 and 2019 in one package
+call :pm-echo "Downloading Microsoft Visual C++ Redistributable 2015-2019"
+wget https://aka.ms/vs/16/release/vc_redist.x64.exe --no-check-certificate -q -O vc_redist.x64.exe || exit 1
 
 call :pm-echo "Checking PHP build works..."
 bin\php\php.exe --version >>"%log_file%" 2>&1 || call :pm-fatal-error "PHP build isn't working"
@@ -307,6 +345,20 @@ call :pm-echo "Done?"
 
 exit 0
 
+:check-vs-exists
+if exist "C:\Program Files (x86)\Microsoft Visual Studio\%~1" (
+    set VS_VER=%~2
+    set VS_YEAR=%~1
+    set CMAKE_TARGET=Visual Studio %~2 %~1
+    call :pm-echo "Found Visual Studio %~1"
+    exit /B 0
+) else (
+    call :pm-echo "DID NOT FIND VS %~1"
+    set VS_VER=
+    set VS_YEAR=
+    exit /B 1
+)
+
 :get-extension-zip-from-github:
 call :pm-echo " - %~1: downloading %~2..."
 call :get-zip https://github.com/%~3/%~4/archive/%~2.zip || exit /B 1
@@ -317,7 +369,7 @@ exit /B 0
 :get-zip
 wget %~1 --no-check-certificate -q -O temp.zip || exit /B 1
 7z x -y temp.zip >nul || exit /B 1
-rm temp.zip
+del /s /q temp.zip >nul || exit /B 1
 exit /B 0
 
 :pm-fatal-error

@@ -5,7 +5,7 @@ jobs:
   steps:
   - bash: |
       sudo apt-get update
-      sudo apt-get install make autoconf automake libtool libtool-bin m4 wget libc-bin gzip bzip2 bison g++ git
+      sudo apt-get install make autoconf automake libtool libtool-bin m4 wget libc-bin gzip bzip2 bison g++ git re2c
     displayName: Install Dependencies
   - bash: |
       # Used "set -ex" instead of hashbang since script isn't executed with hashbang
@@ -16,7 +16,7 @@ jobs:
       echo $PWD
       ls
       chmod +x compile.sh
-      echo | ./compile.sh -t linux64 -j 4 -f -u -g -l
+      echo | ./compile.sh -t linux64 -j 4 -f -g
       tar -czf ./PHP_Linux-x86_64.tar.gz bin
     displayName: Build PHP
   - bash: |
@@ -66,13 +66,14 @@ jobs:
     vmImage: 'macOS-10.14'
   steps:
   - bash: |
-      brew install libtool autoconf automake pkg-config
+      brew install libtool autoconf automake pkg-config bison re2c
     displayName: Install Dependencies
   - bash: |
+      export PATH="/usr/local/opt/bison/bin:$PATH"
       set -ex
       trap "exit 1" ERR
 
-      ./compile.sh -t mac64 -j4 -f -u -g -l
+      ./compile.sh -t mac64 -j4 -f -g
       tar -czf ./PHP_MacOS-x86_64.tar.gz bin
     displayName: Build PHP
   - bash: |

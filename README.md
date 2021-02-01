@@ -1,10 +1,10 @@
 # Custom PHP build scripts for PocketMine-MP
 [![Build Status](https://dev.azure.com/pocketmine/PHP-Builds/_apis/build/status/pmmp.php-build-scripts)](https://dev.azure.com/pocketmine/PHP-Builds/_build?definitionId=3&_a=summary&view=branches)
-## Looking for prebuilt binaries? Head over to our [Jenkins build server](https://jenkins.pmmp.io/job/PHP-7.3-Aggregate)
+## Looking for prebuilt binaries? Head over to our [Jenkins build server](https://jenkins.pmmp.io/job/PHP-7.4-Aggregate)
 
 ## compile.sh
 
-Bash script used to compile PHP on MacOS and Linux platforms. Make sure you have ``make autoconf automake libtool m4 wget getconf gzip bzip2 bison g++ git cmake pkg-config``.
+Bash script used to compile PHP on MacOS and Linux platforms. Make sure you have ``make autoconf automake libtool m4 wget getconf gzip bzip2 bison g++ git cmake pkg-config re2c``.
 
 ### Additional notes
 #### Mac OSX (native compile)
@@ -23,10 +23,11 @@ Bash script used to compile PHP on MacOS and Linux platforms. Make sure you have
 | -f           | Enabling abusive optimizations...                                                     |
 | -g           | Will compile GD2                                                                      |
 | -j           | Set make threads to #                                                                 |
-| -l           | Will compile with LevelDB support (experimental with PHP7)                            |
+| -n           | Don't remove sources after completing compilation                                     |
+| -r           | Will compile Readline                                                                 |
 | -s           | Will compile everything statically                                                    |
 | -t           | Set target                                                                            |
-| -u           | Will compile PocketMine-ChunkUtils C extension (recommended if using PC Anvil worlds) |
+| -v           | Enable Valgrind support in PHP                                                        |
 | -x           | Specifies we are doing cross-compile                                                  |
 
 ### Example:
